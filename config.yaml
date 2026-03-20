@@ -1,0 +1,23 @@
+environment: development
+debug: true
+log_level: INFO
+
+api:
+  title: DriftGuardAI API
+  version: 0.1.0
+  prefix: /api/v1
+
+thresholds:
+  numerical_p_value: 0.05
+  categorical_distance: 0.10
+  missing_rate_delta: 0.02
+
+monitoring:
+  min_rows: 100
+  default_method: kolmogorov_smirnov
+  alert_on_missing_data: true
+
+data:
+  reference_dataset_path: datasets/reference.csv
+  current_dataset_path: datasets/current.csv
+
