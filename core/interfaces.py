@@ -7,6 +7,10 @@ from core.entities import ColumnDriftResult
 
 class DatasetRepository(ABC):
     @abstractmethod
+    def load_datasets(self) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """Return the baseline and incoming datasets after validation."""
+
+    @abstractmethod
     def load_reference_dataset(self) -> pd.DataFrame:
         """Return the baseline dataset used for drift comparison."""
 
@@ -25,4 +29,3 @@ class DriftDetector(ABC):
         threshold: float,
     ) -> ColumnDriftResult:
         """Evaluate a single column for statistical drift."""
-

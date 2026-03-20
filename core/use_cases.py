@@ -23,8 +23,7 @@ class AnalyzeDatasetDriftUseCase:
         dataset_name: str = "production",
         columns: list[str] | None = None,
     ) -> DriftAnalysisReport:
-        reference_dataset = self.repository.load_reference_dataset()
-        current_dataset = self.repository.load_current_dataset()
+        reference_dataset, current_dataset = self.repository.load_datasets()
 
         if len(reference_dataset) < self.min_rows or len(current_dataset) < self.min_rows:
             raise DataValidationError(
@@ -69,4 +68,3 @@ class AnalyzeDatasetDriftUseCase:
                 report.stable_columns.append(result)
 
         return report
-
