@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
-from scipy.stats import ks_2samp
 
 from core.entities import ColumnDriftResult
 from core.interfaces import DriftDetector
+from drift.metrics import kolmogorov_smirnov_test
 
 
 class StatisticalDriftDetector(DriftDetector):
@@ -21,8 +21,14 @@ class StatisticalDriftDetector(DriftDetector):
         current_clean = current.dropna()
 
         if pd.api.types.is_numeric_dtype(reference_clean) and pd.api.types.is_numeric_dtype(current_clean):
-            statistic, p_value = ks_2samp(reference_clean.to_numpy(), current_clean.to_numpy())
-            drift_detected = p_value < threshold
+            ks_result = kolmogorov_smirnov_test(
+                reference_clean,
+                current_clean,
+                significance_level=threshold,
+            )
+            statistic = ks_result.statistic
+            p_value = ks_result.p_value
+            drift_detected = ks_result.drift_detected
             method = "kolmogorov_smirnov"
         else:
             statistic = self._categorical_distance(reference_clean, current_clean)
@@ -49,4 +55,3 @@ class StatisticalDriftDetector(DriftDetector):
         reference_aligned = reference_distribution.reindex(categories, fill_value=0.0)
         current_aligned = current_distribution.reindex(categories, fill_value=0.0)
         return float(np.abs(reference_aligned - current_aligned).sum() / 2.0)
-

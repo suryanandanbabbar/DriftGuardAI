@@ -1,10 +1,79 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Literal
 
 import numpy as np
 import pandas as pd
+from scipy.stats import ks_2samp
+
+
+@dataclass(frozen=True, slots=True)
+class KSTestResult:
+    statistic: float
+    p_value: float
+    drift_detected: bool
+    significance_level: float
+    interpretation: str
+
+
+def kolmogorov_smirnov_test(
+    baseline: Sequence[float] | np.ndarray | pd.Series,
+    incoming: Sequence[float] | np.ndarray | pd.Series,
+    significance_level: float = 0.05,
+) -> KSTestResult:
+    """
+    Compare two numerical distributions using the two-sample Kolmogorov-Smirnov test.
+
+    Parameters
+    ----------
+    baseline:
+        Baseline numerical samples.
+    incoming:
+        Incoming numerical samples to compare with the baseline.
+    significance_level:
+        The alpha threshold used to flag statistically significant drift.
+
+    Returns
+    -------
+    KSTestResult
+        A result object containing the KS statistic, p-value, drift flag, and a
+        short human-readable interpretation.
+
+    Raises
+    ------
+    ValueError
+        If the significance level is outside the open interval (0, 1), or if
+        either dataset contains no finite numerical values.
+    """
+    if not 0 < significance_level < 1:
+        raise ValueError("significance_level must be between 0 and 1.")
+
+    baseline_values = _prepare_numerical_array(baseline, dataset_name="baseline")
+    incoming_values = _prepare_numerical_array(incoming, dataset_name="incoming")
+
+    statistic, p_value = ks_2samp(baseline_values, incoming_values)
+    drift_detected = bool(p_value < significance_level)
+
+    if drift_detected:
+        interpretation = (
+            "Drift detected: reject the null hypothesis that both samples come "
+            f"from the same distribution at alpha={significance_level:.4f}."
+        )
+    else:
+        interpretation = (
+            "No statistically significant drift detected: fail to reject the null "
+            f"hypothesis at alpha={significance_level:.4f}."
+        )
+
+    return KSTestResult(
+        statistic=float(statistic),
+        p_value=float(p_value),
+        drift_detected=drift_detected,
+        significance_level=float(significance_level),
+        interpretation=interpretation,
+    )
 
 
 def population_stability_index(
