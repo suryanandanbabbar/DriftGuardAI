@@ -39,6 +39,8 @@ class FeatureDriftMetrics:
     psi: DriftMetricResult | None = None
     ks: DriftMetricResult | None = None
     kl_divergence: DriftMetricResult | None = None
+    chi_square: DriftMetricResult | None = None
+    distribution_difference: DriftMetricResult | None = None
 
 
 @dataclass(slots=True)

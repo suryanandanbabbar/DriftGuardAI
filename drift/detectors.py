@@ -1,6 +1,5 @@
 from datetime import datetime, timezone
 
-import numpy as np
 import pandas as pd
 
 from core.config import ThresholdSettings, get_settings
@@ -13,6 +12,8 @@ from core.entities import (
 )
 from core.interfaces import DriftDetector as BaseDriftDetector
 from drift.metrics import (
+    categorical_distribution_difference,
+    chi_square_test,
     kolmogorov_smirnov_test,
     kullback_leibler_divergence,
     population_stability_index,
@@ -58,19 +59,18 @@ class DriftDetector:
         baseline_feature: pd.Series,
         incoming_feature: pd.Series,
     ) -> FeatureDriftResult:
-        if not (
-            pd.api.types.is_numeric_dtype(baseline_feature)
-            and pd.api.types.is_numeric_dtype(incoming_feature)
-        ):
-            return FeatureDriftResult(
-                feature_name=feature_name,
-                feature_type=str(baseline_feature.dtype),
-                reference_size=int(baseline_feature.dropna().shape[0]),
-                current_size=int(incoming_feature.dropna().shape[0]),
-                drift_detected=False,
-                supported=False,
-                reason="PSI, KS, and KL divergence are only computed for numerical features.",
-            )
+        if self._is_numeric_feature(baseline_feature) and self._is_numeric_feature(incoming_feature):
+            return self._analyze_numeric_feature(feature_name, baseline_feature, incoming_feature)
+
+        return self._analyze_categorical_feature(feature_name, baseline_feature, incoming_feature)
+
+    def _analyze_numeric_feature(
+        self,
+        feature_name: str,
+        baseline_feature: pd.Series,
+        incoming_feature: pd.Series,
+    ) -> FeatureDriftResult:
+        feature_type = str(baseline_feature.dtype)
 
         baseline_clean = baseline_feature.dropna()
         incoming_clean = incoming_feature.dropna()
@@ -98,7 +98,7 @@ class DriftDetector:
         except ValueError as exc:
             return FeatureDriftResult(
                 feature_name=feature_name,
-                feature_type=str(baseline_feature.dtype),
+                feature_type=feature_type,
                 reference_size=int(baseline_clean.shape[0]),
                 current_size=int(incoming_clean.shape[0]),
                 drift_detected=False,
@@ -139,7 +139,7 @@ class DriftDetector:
 
         return FeatureDriftResult(
             feature_name=feature_name,
-            feature_type=str(baseline_feature.dtype),
+            feature_type=feature_type,
             reference_size=int(baseline_clean.shape[0]),
             current_size=int(incoming_clean.shape[0]),
             drift_detected=any(
@@ -151,6 +151,76 @@ class DriftDetector:
                 kl_divergence=kl_metric,
             ),
         )
+
+    def _analyze_categorical_feature(
+        self,
+        feature_name: str,
+        baseline_feature: pd.Series,
+        incoming_feature: pd.Series,
+    ) -> FeatureDriftResult:
+        feature_type = str(baseline_feature.dtype)
+        reference_size = int(baseline_feature.shape[0])
+        current_size = int(incoming_feature.shape[0])
+
+        try:
+            chi_square_result = chi_square_test(
+                baseline_feature,
+                incoming_feature,
+                significance_level=self.thresholds.categorical_chi_square_significance_level,
+            )
+            distance_value = categorical_distribution_difference(
+                baseline_feature,
+                incoming_feature,
+            )
+        except ValueError as exc:
+            return FeatureDriftResult(
+                feature_name=feature_name,
+                feature_type=feature_type,
+                reference_size=reference_size,
+                current_size=current_size,
+                drift_detected=False,
+                supported=False,
+                reason=str(exc),
+            )
+
+        chi_square_metric = DriftMetricResult(
+            metric_name="chi_square",
+            value=float(chi_square_result.statistic),
+            threshold=float(self.thresholds.categorical_chi_square_significance_level),
+            drift_detected=chi_square_result.drift_detected,
+            p_value=float(chi_square_result.p_value),
+            interpretation=chi_square_result.interpretation,
+        )
+        distance_metric = DriftMetricResult(
+            metric_name="distribution_difference",
+            value=float(distance_value),
+            threshold=float(self.thresholds.categorical_distance),
+            drift_detected=bool(distance_value >= self.thresholds.categorical_distance),
+            interpretation=(
+                "Drift detected because categorical distribution difference exceeded "
+                "the configured threshold."
+                if distance_value >= self.thresholds.categorical_distance
+                else "No categorical distribution-difference drift detected."
+            ),
+        )
+
+        return FeatureDriftResult(
+            feature_name=feature_name,
+            feature_type=feature_type,
+            reference_size=reference_size,
+            current_size=current_size,
+            drift_detected=any(
+                metric.drift_detected for metric in (chi_square_metric, distance_metric)
+            ),
+            metrics=FeatureDriftMetrics(
+                chi_square=chi_square_metric,
+                distribution_difference=distance_metric,
+            ),
+        )
+
+    @staticmethod
+    def _is_numeric_feature(feature: pd.Series) -> bool:
+        return pd.api.types.is_numeric_dtype(feature) and not pd.api.types.is_bool_dtype(feature)
 
 
 class StatisticalDriftDetector(BaseDriftDetector):
@@ -195,10 +265,4 @@ class StatisticalDriftDetector(BaseDriftDetector):
 
     @staticmethod
     def _categorical_distance(reference: pd.Series, current: pd.Series) -> float:
-        reference_distribution = reference.astype(str).value_counts(normalize=True)
-        current_distribution = current.astype(str).value_counts(normalize=True)
-        categories = reference_distribution.index.union(current_distribution.index)
-
-        reference_aligned = reference_distribution.reindex(categories, fill_value=0.0)
-        current_aligned = current_distribution.reindex(categories, fill_value=0.0)
-        return float(np.abs(reference_aligned - current_aligned).sum() / 2.0)
+        return categorical_distribution_difference(reference, current)

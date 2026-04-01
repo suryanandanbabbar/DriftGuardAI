@@ -20,6 +20,7 @@ class APISettings(BaseModel):
 class ThresholdSettings(BaseModel):
     numerical_p_value: float = 0.05
     categorical_distance: float = 0.10
+    categorical_chi_square_significance_level: float = 0.05
     missing_rate_delta: float = 0.02
     psi: float = 0.20
     ks_significance_level: float = 0.05

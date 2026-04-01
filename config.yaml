@@ -10,6 +10,7 @@ api:
 thresholds:
   numerical_p_value: 0.05
   categorical_distance: 0.10
+  categorical_chi_square_significance_level: 0.05
   missing_rate_delta: 0.02
   psi: 0.20
   ks_significance_level: 0.05

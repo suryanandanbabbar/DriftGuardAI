@@ -6,11 +6,20 @@ from typing import Literal
 
 import numpy as np
 import pandas as pd
-from scipy.stats import ks_2samp
+from scipy.stats import chi2_contingency, ks_2samp
 
 
 @dataclass(frozen=True, slots=True)
 class KSTestResult:
+    statistic: float
+    p_value: float
+    drift_detected: bool
+    significance_level: float
+    interpretation: str
+
+
+@dataclass(frozen=True, slots=True)
+class ChiSquareTestResult:
     statistic: float
     p_value: float
     drift_detected: bool
@@ -193,6 +202,57 @@ def kullback_leibler_divergence(
     return float(np.sum(kl_values))
 
 
+def chi_square_test(
+    baseline: Sequence[object] | np.ndarray | pd.Series,
+    incoming: Sequence[object] | np.ndarray | pd.Series,
+    significance_level: float = 0.05,
+) -> ChiSquareTestResult:
+    """
+    Compare two categorical distributions using a chi-square test of independence.
+
+    The baseline and incoming samples are converted into aligned category counts,
+    including missing values as an explicit category so distribution shifts in nulls
+    are visible in the result.
+    """
+    if not 0 < significance_level < 1:
+        raise ValueError("significance_level must be between 0 and 1.")
+
+    baseline_counts, incoming_counts = _categorical_counts(baseline, incoming)
+    contingency_table = np.vstack((baseline_counts, incoming_counts))
+    statistic, p_value, _, _ = chi2_contingency(contingency_table, correction=False)
+    drift_detected = bool(p_value < significance_level)
+
+    if drift_detected:
+        interpretation = (
+            "Drift detected: reject the null hypothesis that the categorical "
+            f"distributions are independent at alpha={significance_level:.4f}."
+        )
+    else:
+        interpretation = (
+            "No statistically significant categorical drift detected: fail to "
+            f"reject the null hypothesis at alpha={significance_level:.4f}."
+        )
+
+    return ChiSquareTestResult(
+        statistic=float(statistic),
+        p_value=float(p_value),
+        drift_detected=drift_detected,
+        significance_level=float(significance_level),
+        interpretation=interpretation,
+    )
+
+
+def categorical_distribution_difference(
+    baseline: Sequence[object] | np.ndarray | pd.Series,
+    incoming: Sequence[object] | np.ndarray | pd.Series,
+) -> float:
+    """
+    Compute total variation distance between two categorical frequency distributions.
+    """
+    baseline_distribution, incoming_distribution = _categorical_distributions(baseline, incoming)
+    return float(np.abs(baseline_distribution - incoming_distribution).sum() / 2.0)
+
+
 def _prepare_numerical_array(
     values: Sequence[float] | np.ndarray | pd.Series,
     dataset_name: str,
@@ -204,6 +264,22 @@ def _prepare_numerical_array(
         raise ValueError(f"{dataset_name} must contain at least one finite numerical value.")
 
     return finite_values
+
+
+def _prepare_categorical_series(
+    values: Sequence[object] | np.ndarray | pd.Series,
+    dataset_name: str,
+) -> pd.Series:
+    categorical_values = pd.Series(values).astype("object").where(
+        lambda series: series.notna(),
+        "__missing__",
+    )
+    normalized_values = categorical_values.astype(str)
+
+    if normalized_values.empty:
+        raise ValueError(f"{dataset_name} must contain at least one categorical value.")
+
+    return normalized_values
 
 
 def _histogram_distributions(
@@ -222,6 +298,32 @@ def _histogram_distributions(
 
     baseline_distribution = _to_stable_distribution(baseline_counts, epsilon=epsilon)
     incoming_distribution = _to_stable_distribution(incoming_counts, epsilon=epsilon)
+    return baseline_distribution, incoming_distribution
+
+
+def _categorical_counts(
+    baseline: Sequence[object] | np.ndarray | pd.Series,
+    incoming: Sequence[object] | np.ndarray | pd.Series,
+) -> tuple[np.ndarray, np.ndarray]:
+    baseline_values = _prepare_categorical_series(baseline, dataset_name="baseline")
+    incoming_values = _prepare_categorical_series(incoming, dataset_name="incoming")
+
+    baseline_counts_series = baseline_values.value_counts(dropna=False)
+    incoming_counts_series = incoming_values.value_counts(dropna=False)
+    categories = baseline_counts_series.index.union(incoming_counts_series.index)
+
+    baseline_counts = baseline_counts_series.reindex(categories, fill_value=0).to_numpy(dtype=float)
+    incoming_counts = incoming_counts_series.reindex(categories, fill_value=0).to_numpy(dtype=float)
+    return baseline_counts, incoming_counts
+
+
+def _categorical_distributions(
+    baseline: Sequence[object] | np.ndarray | pd.Series,
+    incoming: Sequence[object] | np.ndarray | pd.Series,
+) -> tuple[np.ndarray, np.ndarray]:
+    baseline_counts, incoming_counts = _categorical_counts(baseline, incoming)
+    baseline_distribution = baseline_counts / baseline_counts.sum()
+    incoming_distribution = incoming_counts / incoming_counts.sum()
     return baseline_distribution, incoming_distribution
 
 
