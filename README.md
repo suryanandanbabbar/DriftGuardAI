@@ -51,9 +51,11 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn main:app --reload
+streamlit run dashboard.py
 ```
 
 The API will be available at `http://127.0.0.1:8000`, with the health endpoint at `http://127.0.0.1:8000/api/v1/health`.
+The Streamlit dashboard will be available at `http://127.0.0.1:8501`.
 
 ## Notes
 
