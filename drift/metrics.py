@@ -126,20 +126,71 @@ def population_stability_index(
     if epsilon <= 0:
         raise ValueError("epsilon must be greater than zero.")
 
-    baseline_values = _prepare_numerical_array(baseline, dataset_name="baseline")
-    incoming_values = _prepare_numerical_array(incoming, dataset_name="incoming")
-    bin_edges = _resolve_bin_edges(baseline_values, incoming_values, bins=bins, strategy=strategy)
-
-    baseline_counts, _ = np.histogram(baseline_values, bins=bin_edges)
-    incoming_counts, _ = np.histogram(incoming_values, bins=bin_edges)
-
-    baseline_distribution = _to_stable_distribution(baseline_counts, epsilon=epsilon)
-    incoming_distribution = _to_stable_distribution(incoming_counts, epsilon=epsilon)
+    baseline_distribution, incoming_distribution = _histogram_distributions(
+        baseline=baseline,
+        incoming=incoming,
+        bins=bins,
+        strategy=strategy,
+        epsilon=epsilon,
+    )
 
     psi_values = (incoming_distribution - baseline_distribution) * np.log(
         incoming_distribution / baseline_distribution,
     )
     return float(np.sum(psi_values))
+
+
+def kullback_leibler_divergence(
+    baseline: Sequence[float] | np.ndarray | pd.Series,
+    incoming: Sequence[float] | np.ndarray | pd.Series,
+    bins: int | Sequence[float] = 10,
+    strategy: Literal["quantile", "uniform"] = "quantile",
+    epsilon: float = 1e-6,
+) -> float:
+    """
+    Compute the Kullback-Leibler divergence D_KL(P || Q) between two numerical samples.
+
+    The input samples are converted into histogram-based probability distributions
+    using shared bin edges. `baseline` is treated as P and `incoming` as Q, so the
+    returned value is directional.
+
+    Parameters
+    ----------
+    baseline:
+        Baseline numerical samples used as the reference distribution P.
+    incoming:
+        Incoming numerical samples used as the comparison distribution Q.
+    bins:
+        Either the number of bins to create, or an explicit sequence of bin edges.
+    strategy:
+        Bin generation strategy used when `bins` is an integer.
+        Supported values are `"quantile"` and `"uniform"`.
+    epsilon:
+        Small positive constant used to stabilize zero-probability bins.
+
+    Returns
+    -------
+    float
+        The histogram-based KL divergence value.
+
+    Raises
+    ------
+    ValueError
+        If either dataset has no valid numerical values, if `bins` is invalid,
+        or if `epsilon` is not strictly positive.
+    """
+    if epsilon <= 0:
+        raise ValueError("epsilon must be greater than zero.")
+
+    baseline_distribution, incoming_distribution = _histogram_distributions(
+        baseline=baseline,
+        incoming=incoming,
+        bins=bins,
+        strategy=strategy,
+        epsilon=epsilon,
+    )
+    kl_values = baseline_distribution * np.log(baseline_distribution / incoming_distribution)
+    return float(np.sum(kl_values))
 
 
 def _prepare_numerical_array(
@@ -153,6 +204,25 @@ def _prepare_numerical_array(
         raise ValueError(f"{dataset_name} must contain at least one finite numerical value.")
 
     return finite_values
+
+
+def _histogram_distributions(
+    baseline: Sequence[float] | np.ndarray | pd.Series,
+    incoming: Sequence[float] | np.ndarray | pd.Series,
+    bins: int | Sequence[float],
+    strategy: Literal["quantile", "uniform"],
+    epsilon: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    baseline_values = _prepare_numerical_array(baseline, dataset_name="baseline")
+    incoming_values = _prepare_numerical_array(incoming, dataset_name="incoming")
+    bin_edges = _resolve_bin_edges(baseline_values, incoming_values, bins=bins, strategy=strategy)
+
+    baseline_counts, _ = np.histogram(baseline_values, bins=bin_edges)
+    incoming_counts, _ = np.histogram(incoming_values, bins=bin_edges)
+
+    baseline_distribution = _to_stable_distribution(baseline_counts, epsilon=epsilon)
+    incoming_distribution = _to_stable_distribution(incoming_counts, epsilon=epsilon)
+    return baseline_distribution, incoming_distribution
 
 
 def _resolve_bin_edges(
