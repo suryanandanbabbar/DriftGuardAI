@@ -1,0 +1,16 @@
+age,income,credit_score,transactions_per_month,avg_transaction_amount,region,device_type
+22,28000,590,8,85.2,South,Mobile
+24,30000,610,9,90.4,South,Mobile
+26,32000,605,10,95.1,South,Mobile
+21,25000,580,7,70.3,South,Mobile
+23,27000,600,8,80.2,South,Mobile
+25,29000,610,9,88.7,South,Mobile
+28,31000,620,11,100.4,South,Mobile
+30,33000,630,12,105.9,South,Mobile
+27,30500,615,10,97.3,South,Mobile
+24,29500,605,9,92.5,South,Mobile
+22,26000,585,7,75.6,South,Mobile
+23,27500,595,8,82.1,South,Mobile
+26,31500,620,11,102.2,South,Mobile
+29,34000,635,12,110.5,South,Mobile
+31,36000,645,13,115.8,South,Mobile
