@@ -2,6 +2,11 @@ environment: development
 debug: true
 log_level: INFO
 
+logging:
+  level: INFO
+  structured: true
+  timestamp_format: "%Y-%m-%dT%H:%M:%S%z"
+
 api:
   title: DriftGuardAI API
   version: 0.1.0

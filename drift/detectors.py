@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import logging
 
 import pandas as pd
 
@@ -19,6 +20,9 @@ from drift.metrics import (
     population_stability_index,
 )
 from utils.dataset_validation import validate_compatible_datasets
+from utils.logging import get_logger, log_event
+
+logger = get_logger(__name__)
 
 
 class DriftDetector:
@@ -32,10 +36,27 @@ class DriftDetector:
         self.incoming_dataset = incoming_dataset.copy()
         self.thresholds = thresholds or get_settings().thresholds
         validate_compatible_datasets(self.baseline_dataset, self.incoming_dataset)
+        log_event(
+            logger,
+            logging.INFO,
+            "Initialized drift detector.",
+            event="drift_detector_initialized",
+            rows_baseline=int(self.baseline_dataset.shape[0]),
+            rows_incoming=int(self.incoming_dataset.shape[0]),
+            total_features=int(self.baseline_dataset.shape[1]),
+        )
 
     def generate_report(self, dataset_name: str | None = None) -> FeatureDriftReport:
         features: list[FeatureDriftResult] = []
         resolved_dataset_name = dataset_name or get_settings().runtime.default_dataset_name
+        log_event(
+            logger,
+            logging.INFO,
+            "Starting drift detection report generation.",
+            event="drift_detection_started",
+            dataset_name=resolved_dataset_name,
+            total_features=int(self.baseline_dataset.shape[1]),
+        )
 
         for feature_name in self.baseline_dataset.columns:
             baseline_feature = self.baseline_dataset[feature_name]
@@ -48,11 +69,22 @@ class DriftDetector:
                 ),
             )
 
-        return FeatureDriftReport(
+        report = FeatureDriftReport(
             dataset_name=resolved_dataset_name,
             generated_at=datetime.now(timezone.utc).isoformat(),
             features=features,
         )
+        log_event(
+            logger,
+            logging.INFO,
+            "Completed drift detection report generation.",
+            event="drift_detection_completed",
+            dataset_name=resolved_dataset_name,
+            total_features=report.total_features,
+            drifted_features=len(report.drifted_features),
+            stable_features=len(report.stable_features),
+        )
+        return report
 
     def _analyze_feature(
         self,
@@ -97,6 +129,15 @@ class DriftDetector:
                 epsilon=self.thresholds.histogram_epsilon,
             )
         except ValueError as exc:
+            log_event(
+                logger,
+                logging.WARNING,
+                "Skipping numeric feature drift analysis due to invalid data.",
+                event="numeric_feature_analysis_skipped",
+                feature_name=feature_name,
+                feature_type=feature_type,
+                error=str(exc),
+            )
             return FeatureDriftResult(
                 feature_name=feature_name,
                 feature_type=feature_type,
@@ -138,7 +179,7 @@ class DriftDetector:
             ),
         )
 
-        return FeatureDriftResult(
+        feature_result = FeatureDriftResult(
             feature_name=feature_name,
             feature_type=feature_type,
             reference_size=int(baseline_clean.shape[0]),
@@ -152,6 +193,8 @@ class DriftDetector:
                 kl_divergence=kl_metric,
             ),
         )
+        self._log_feature_result(feature_result)
+        return feature_result
 
     def _analyze_categorical_feature(
         self,
@@ -174,6 +217,15 @@ class DriftDetector:
                 incoming_feature,
             )
         except ValueError as exc:
+            log_event(
+                logger,
+                logging.WARNING,
+                "Skipping categorical feature drift analysis due to invalid data.",
+                event="categorical_feature_analysis_skipped",
+                feature_name=feature_name,
+                feature_type=feature_type,
+                error=str(exc),
+            )
             return FeatureDriftResult(
                 feature_name=feature_name,
                 feature_type=feature_type,
@@ -205,7 +257,7 @@ class DriftDetector:
             ),
         )
 
-        return FeatureDriftResult(
+        feature_result = FeatureDriftResult(
             feature_name=feature_name,
             feature_type=feature_type,
             reference_size=reference_size,
@@ -218,10 +270,46 @@ class DriftDetector:
                 distribution_difference=distance_metric,
             ),
         )
+        self._log_feature_result(feature_result)
+        return feature_result
 
     @staticmethod
     def _is_numeric_feature(feature: pd.Series) -> bool:
         return pd.api.types.is_numeric_dtype(feature) and not pd.api.types.is_bool_dtype(feature)
+
+    @staticmethod
+    def _log_feature_result(feature_result: FeatureDriftResult) -> None:
+        metric_payload = {
+            metric.metric_name: {
+                "value": metric.value,
+                "threshold": metric.threshold,
+                "drift_detected": metric.drift_detected,
+                "p_value": metric.p_value,
+            }
+            for metric in (
+                feature_result.metrics.psi,
+                feature_result.metrics.ks,
+                feature_result.metrics.kl_divergence,
+                feature_result.metrics.chi_square,
+                feature_result.metrics.distribution_difference,
+            )
+            if metric is not None
+        }
+        level = logging.WARNING if feature_result.drift_detected else logging.INFO
+        log_event(
+            logger,
+            level,
+            "Computed drift analysis for feature.",
+            event="feature_drift_analyzed",
+            feature_name=feature_result.feature_name,
+            feature_type=feature_result.feature_type,
+            drift_detected=feature_result.drift_detected,
+            supported=feature_result.supported,
+            reference_size=feature_result.reference_size,
+            current_size=feature_result.current_size,
+            metrics=metric_payload,
+            reason=feature_result.reason,
+        )
 
 
 class StatisticalDriftDetector(BaseDriftDetector):
@@ -230,6 +318,13 @@ class StatisticalDriftDetector(BaseDriftDetector):
             categorical_threshold
             if categorical_threshold is not None
             else get_settings().thresholds.categorical_distance
+        )
+        log_event(
+            logger,
+            logging.DEBUG,
+            "Initialized statistical drift detector.",
+            event="statistical_drift_detector_initialized",
+            categorical_threshold=float(self.categorical_threshold),
         )
 
     def analyze(

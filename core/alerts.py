@@ -8,6 +8,7 @@ from urllib.request import Request, urlopen
 
 from core.config import AlertSettings, get_settings
 from core.entities import AlertDispatchReport, AlertEvent, DriftMetricResult, FeatureDriftReport
+from utils.logging import log_event
 
 
 class AlertManager:
@@ -20,6 +21,14 @@ class AlertManager:
         self.logger = logger or logging.getLogger(__name__)
 
     def dispatch(self, report: FeatureDriftReport) -> AlertDispatchReport:
+        log_event(
+            self.logger,
+            logging.INFO,
+            "Starting alert dispatch.",
+            event="alert_dispatch_started",
+            dataset_name=report.dataset_name,
+            generated_at=report.generated_at,
+        )
         alerts = self.build_alerts(report)
         dispatch_report = AlertDispatchReport(
             total_alerts=len(alerts),
@@ -27,6 +36,14 @@ class AlertManager:
         )
 
         if not self.settings.enabled or not alerts:
+            log_event(
+                self.logger,
+                logging.INFO,
+                "Alert dispatch skipped.",
+                event="alert_dispatch_skipped",
+                enabled=self.settings.enabled,
+                total_alerts=len(alerts),
+            )
             return dispatch_report
 
         if self.settings.log_alerts:
@@ -45,6 +62,16 @@ class AlertManager:
                 payload=self._build_slack_payload(alerts, report),
             )
 
+        log_event(
+            self.logger,
+            logging.INFO,
+            "Completed alert dispatch.",
+            event="alert_dispatch_completed",
+            total_alerts=dispatch_report.total_alerts,
+            logged_alerts=dispatch_report.logged_alerts,
+            webhook_sent=dispatch_report.webhook_sent,
+            slack_sent=dispatch_report.slack_sent,
+        )
         return dispatch_report
 
     def build_alerts(self, report: FeatureDriftReport) -> list[AlertEvent]:
@@ -81,12 +108,34 @@ class AlertManager:
                     ),
                 )
 
+        log_event(
+            self.logger,
+            logging.INFO,
+            "Built drift alerts from report.",
+            event="alerts_built",
+            dataset_name=report.dataset_name,
+            total_alerts=len(alerts),
+        )
         return alerts
 
     def _log_alerts(self, alerts: list[AlertEvent]) -> None:
         for alert in alerts:
             log_method = self.logger.critical if alert.severity == "critical" else self.logger.warning
-            log_method(alert.message)
+            log_method(
+                alert.message,
+                extra={
+                    "event": "alert_triggered",
+                    "dataset_name": alert.dataset_name,
+                    "feature_name": alert.feature_name,
+                    "feature_type": alert.feature_type,
+                    "metric_name": alert.metric_name,
+                    "metric_value": alert.metric_value,
+                    "threshold": alert.threshold,
+                    "severity": alert.severity,
+                    "p_value": alert.p_value,
+                    "generated_at": alert.generated_at,
+                },
+            )
 
     def _determine_severity(self, metric: DriftMetricResult) -> str:
         if metric.p_value is not None:
@@ -164,9 +213,24 @@ class AlertManager:
 
         try:
             with urlopen(request, timeout=self.settings.timeout_seconds) as response:
+                log_event(
+                    self.logger,
+                    logging.INFO,
+                    "Successfully sent alert webhook.",
+                    event="alert_webhook_sent",
+                    url=url,
+                    status_code=response.status,
+                )
                 return 200 <= response.status < 300
         except URLError as exc:
-            self.logger.warning("Failed to send alert webhook: %s", exc)
+            log_event(
+                self.logger,
+                logging.WARNING,
+                "Failed to send alert webhook.",
+                event="alert_webhook_failed",
+                url=url,
+                error=str(exc),
+            )
             return False
 
     @staticmethod

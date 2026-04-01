@@ -46,6 +46,12 @@ class RuntimeSettings(BaseModel):
     uploaded_dataset_name: str = "uploaded"
 
 
+class LoggingSettings(BaseModel):
+    level: str = "INFO"
+    structured: bool = True
+    timestamp_format: str = "%Y-%m-%dT%H:%M:%S%z"
+
+
 class AlertSettings(BaseModel):
     enabled: bool = True
     log_alerts: bool = True
@@ -61,6 +67,7 @@ class AppSettings(BaseModel):
     environment: str = "development"
     debug: bool = True
     log_level: str = "INFO"
+    logging: LoggingSettings = Field(default_factory=LoggingSettings)
     api: APISettings = Field(default_factory=APISettings)
     thresholds: ThresholdSettings = Field(default_factory=ThresholdSettings)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
@@ -86,6 +93,9 @@ def load_settings(config_path: str | Path | None = None) -> AppSettings:
     load_dotenv()
     resolved_path = Path(config_path) if config_path else _resolve_config_path()
     raw_config = _load_yaml_file(resolved_path)
+    logging_config = raw_config.setdefault("logging", {})
+    if "log_level" in raw_config and "level" not in logging_config:
+        logging_config["level"] = raw_config["log_level"]
     return AppSettings(**raw_config)
 
 
