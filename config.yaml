@@ -28,6 +28,10 @@ data:
   reference_dataset_path: datasets/reference.csv
   current_dataset_path: datasets/current.csv
 
+runtime:
+  default_dataset_name: production
+  uploaded_dataset_name: uploaded
+
 alerts:
   enabled: true
   log_alerts: true

@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 from scipy.stats import chi2_contingency, ks_2samp
 
+from core.config import get_settings
+
 
 @dataclass(frozen=True, slots=True)
 class KSTestResult:
@@ -30,7 +32,7 @@ class ChiSquareTestResult:
 def kolmogorov_smirnov_test(
     baseline: Sequence[float] | np.ndarray | pd.Series,
     incoming: Sequence[float] | np.ndarray | pd.Series,
-    significance_level: float = 0.05,
+    significance_level: float | None = None,
 ) -> KSTestResult:
     """
     Compare two numerical distributions using the two-sample Kolmogorov-Smirnov test.
@@ -56,31 +58,37 @@ def kolmogorov_smirnov_test(
         If the significance level is outside the open interval (0, 1), or if
         either dataset contains no finite numerical values.
     """
-    if not 0 < significance_level < 1:
+    resolved_significance_level = (
+        significance_level
+        if significance_level is not None
+        else get_settings().thresholds.ks_significance_level
+    )
+
+    if not 0 < resolved_significance_level < 1:
         raise ValueError("significance_level must be between 0 and 1.")
 
     baseline_values = _prepare_numerical_array(baseline, dataset_name="baseline")
     incoming_values = _prepare_numerical_array(incoming, dataset_name="incoming")
 
     statistic, p_value = ks_2samp(baseline_values, incoming_values)
-    drift_detected = bool(p_value < significance_level)
+    drift_detected = bool(p_value < resolved_significance_level)
 
     if drift_detected:
         interpretation = (
             "Drift detected: reject the null hypothesis that both samples come "
-            f"from the same distribution at alpha={significance_level:.4f}."
+            f"from the same distribution at alpha={resolved_significance_level:.4f}."
         )
     else:
         interpretation = (
             "No statistically significant drift detected: fail to reject the null "
-            f"hypothesis at alpha={significance_level:.4f}."
+            f"hypothesis at alpha={resolved_significance_level:.4f}."
         )
 
     return KSTestResult(
         statistic=float(statistic),
         p_value=float(p_value),
         drift_detected=drift_detected,
-        significance_level=float(significance_level),
+        significance_level=float(resolved_significance_level),
         interpretation=interpretation,
     )
 
@@ -88,9 +96,9 @@ def kolmogorov_smirnov_test(
 def population_stability_index(
     baseline: Sequence[float] | np.ndarray | pd.Series,
     incoming: Sequence[float] | np.ndarray | pd.Series,
-    bins: int | Sequence[float] = 10,
-    strategy: Literal["quantile", "uniform"] = "quantile",
-    epsilon: float = 1e-6,
+    bins: int | Sequence[float] | None = None,
+    strategy: Literal["quantile", "uniform"] | None = None,
+    epsilon: float | None = None,
 ) -> float:
     """
     Compute the Population Stability Index (PSI) between two numerical distributions.
@@ -132,15 +140,21 @@ def population_stability_index(
         If either dataset has no valid numerical values, if `bins` is invalid,
         or if `epsilon` is not strictly positive.
     """
-    if epsilon <= 0:
+    resolved_bins, resolved_strategy, resolved_epsilon = _resolve_histogram_parameters(
+        bins=bins,
+        strategy=strategy,
+        epsilon=epsilon,
+    )
+
+    if resolved_epsilon <= 0:
         raise ValueError("epsilon must be greater than zero.")
 
     baseline_distribution, incoming_distribution = _histogram_distributions(
         baseline=baseline,
         incoming=incoming,
-        bins=bins,
-        strategy=strategy,
-        epsilon=epsilon,
+        bins=resolved_bins,
+        strategy=resolved_strategy,
+        epsilon=resolved_epsilon,
     )
 
     psi_values = (incoming_distribution - baseline_distribution) * np.log(
@@ -152,9 +166,9 @@ def population_stability_index(
 def kullback_leibler_divergence(
     baseline: Sequence[float] | np.ndarray | pd.Series,
     incoming: Sequence[float] | np.ndarray | pd.Series,
-    bins: int | Sequence[float] = 10,
-    strategy: Literal["quantile", "uniform"] = "quantile",
-    epsilon: float = 1e-6,
+    bins: int | Sequence[float] | None = None,
+    strategy: Literal["quantile", "uniform"] | None = None,
+    epsilon: float | None = None,
 ) -> float:
     """
     Compute the Kullback-Leibler divergence D_KL(P || Q) between two numerical samples.
@@ -188,15 +202,21 @@ def kullback_leibler_divergence(
         If either dataset has no valid numerical values, if `bins` is invalid,
         or if `epsilon` is not strictly positive.
     """
-    if epsilon <= 0:
+    resolved_bins, resolved_strategy, resolved_epsilon = _resolve_histogram_parameters(
+        bins=bins,
+        strategy=strategy,
+        epsilon=epsilon,
+    )
+
+    if resolved_epsilon <= 0:
         raise ValueError("epsilon must be greater than zero.")
 
     baseline_distribution, incoming_distribution = _histogram_distributions(
         baseline=baseline,
         incoming=incoming,
-        bins=bins,
-        strategy=strategy,
-        epsilon=epsilon,
+        bins=resolved_bins,
+        strategy=resolved_strategy,
+        epsilon=resolved_epsilon,
     )
     kl_values = baseline_distribution * np.log(baseline_distribution / incoming_distribution)
     return float(np.sum(kl_values))
@@ -205,7 +225,7 @@ def kullback_leibler_divergence(
 def chi_square_test(
     baseline: Sequence[object] | np.ndarray | pd.Series,
     incoming: Sequence[object] | np.ndarray | pd.Series,
-    significance_level: float = 0.05,
+    significance_level: float | None = None,
 ) -> ChiSquareTestResult:
     """
     Compare two categorical distributions using a chi-square test of independence.
@@ -214,30 +234,36 @@ def chi_square_test(
     including missing values as an explicit category so distribution shifts in nulls
     are visible in the result.
     """
-    if not 0 < significance_level < 1:
+    resolved_significance_level = (
+        significance_level
+        if significance_level is not None
+        else get_settings().thresholds.categorical_chi_square_significance_level
+    )
+
+    if not 0 < resolved_significance_level < 1:
         raise ValueError("significance_level must be between 0 and 1.")
 
     baseline_counts, incoming_counts = _categorical_counts(baseline, incoming)
     contingency_table = np.vstack((baseline_counts, incoming_counts))
     statistic, p_value, _, _ = chi2_contingency(contingency_table, correction=False)
-    drift_detected = bool(p_value < significance_level)
+    drift_detected = bool(p_value < resolved_significance_level)
 
     if drift_detected:
         interpretation = (
             "Drift detected: reject the null hypothesis that the categorical "
-            f"distributions are independent at alpha={significance_level:.4f}."
+            f"distributions are independent at alpha={resolved_significance_level:.4f}."
         )
     else:
         interpretation = (
             "No statistically significant categorical drift detected: fail to "
-            f"reject the null hypothesis at alpha={significance_level:.4f}."
+            f"reject the null hypothesis at alpha={resolved_significance_level:.4f}."
         )
 
     return ChiSquareTestResult(
         statistic=float(statistic),
         p_value=float(p_value),
         drift_detected=drift_detected,
-        significance_level=float(significance_level),
+        significance_level=float(resolved_significance_level),
         interpretation=interpretation,
     )
 
@@ -299,6 +325,18 @@ def _histogram_distributions(
     baseline_distribution = _to_stable_distribution(baseline_counts, epsilon=epsilon)
     incoming_distribution = _to_stable_distribution(incoming_counts, epsilon=epsilon)
     return baseline_distribution, incoming_distribution
+
+
+def _resolve_histogram_parameters(
+    bins: int | Sequence[float] | None,
+    strategy: Literal["quantile", "uniform"] | None,
+    epsilon: float | None,
+) -> tuple[int | Sequence[float], Literal["quantile", "uniform"], float]:
+    threshold_settings = get_settings().thresholds
+    resolved_bins = bins if bins is not None else threshold_settings.histogram_bins
+    resolved_strategy = strategy if strategy is not None else threshold_settings.histogram_strategy
+    resolved_epsilon = epsilon if epsilon is not None else threshold_settings.histogram_epsilon
+    return resolved_bins, resolved_strategy, resolved_epsilon
 
 
 def _categorical_counts(

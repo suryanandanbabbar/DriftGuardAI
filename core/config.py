@@ -41,6 +41,11 @@ class DataSettings(BaseModel):
     current_dataset_path: str = "datasets/current.csv"
 
 
+class RuntimeSettings(BaseModel):
+    default_dataset_name: str = "production"
+    uploaded_dataset_name: str = "uploaded"
+
+
 class AlertSettings(BaseModel):
     enabled: bool = True
     log_alerts: bool = True
@@ -60,7 +65,13 @@ class AppSettings(BaseModel):
     thresholds: ThresholdSettings = Field(default_factory=ThresholdSettings)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
     data: DataSettings = Field(default_factory=DataSettings)
+    runtime: RuntimeSettings = Field(default_factory=RuntimeSettings)
     alerts: AlertSettings = Field(default_factory=AlertSettings)
+
+
+def _resolve_config_path() -> Path:
+    configured_path = os.getenv("DRIFT_GUARD_CONFIG_PATH")
+    return Path(configured_path) if configured_path else DEFAULT_CONFIG_PATH
 
 
 def _load_yaml_file(config_path: Path) -> dict:
@@ -71,10 +82,18 @@ def _load_yaml_file(config_path: Path) -> dict:
         return yaml.safe_load(config_file) or {}
 
 
+def load_settings(config_path: str | Path | None = None) -> AppSettings:
+    load_dotenv()
+    resolved_path = Path(config_path) if config_path else _resolve_config_path()
+    raw_config = _load_yaml_file(resolved_path)
+    return AppSettings(**raw_config)
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> AppSettings:
-    load_dotenv()
-    configured_path = os.getenv("DRIFT_GUARD_CONFIG_PATH")
-    config_path = Path(configured_path) if configured_path else DEFAULT_CONFIG_PATH
-    raw_config = _load_yaml_file(config_path)
-    return AppSettings(**raw_config)
+    return load_settings()
+
+
+def reload_settings() -> AppSettings:
+    get_settings.cache_clear()
+    return get_settings()

@@ -33,8 +33,9 @@ class DriftDetector:
         self.thresholds = thresholds or get_settings().thresholds
         validate_compatible_datasets(self.baseline_dataset, self.incoming_dataset)
 
-    def generate_report(self, dataset_name: str = "incoming") -> FeatureDriftReport:
+    def generate_report(self, dataset_name: str | None = None) -> FeatureDriftReport:
         features: list[FeatureDriftResult] = []
+        resolved_dataset_name = dataset_name or get_settings().runtime.default_dataset_name
 
         for feature_name in self.baseline_dataset.columns:
             baseline_feature = self.baseline_dataset[feature_name]
@@ -48,7 +49,7 @@ class DriftDetector:
             )
 
         return FeatureDriftReport(
-            dataset_name=dataset_name,
+            dataset_name=resolved_dataset_name,
             generated_at=datetime.now(timezone.utc).isoformat(),
             features=features,
         )
@@ -224,8 +225,12 @@ class DriftDetector:
 
 
 class StatisticalDriftDetector(BaseDriftDetector):
-    def __init__(self, categorical_threshold: float = 0.10) -> None:
-        self.categorical_threshold = categorical_threshold
+    def __init__(self, categorical_threshold: float | None = None) -> None:
+        self.categorical_threshold = (
+            categorical_threshold
+            if categorical_threshold is not None
+            else get_settings().thresholds.categorical_distance
+        )
 
     def analyze(
         self,

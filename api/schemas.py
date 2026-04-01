@@ -1,8 +1,8 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class AnalyzeDriftRequest(BaseModel):
-    dataset_name: str = "production"
+    dataset_name: str | None = None
     reference_path: str | None = None
     current_path: str | None = None
     use_predefined_paths: bool = True

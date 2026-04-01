@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from core.config import get_settings
 from core.entities import DriftAnalysisReport
 from core.exceptions import DataValidationError
 from core.interfaces import DatasetRepository, DriftDetector
@@ -20,9 +21,10 @@ class AnalyzeDatasetDriftUseCase:
 
     def execute(
         self,
-        dataset_name: str = "production",
+        dataset_name: str | None = None,
         columns: list[str] | None = None,
     ) -> DriftAnalysisReport:
+        resolved_dataset_name = dataset_name or get_settings().runtime.default_dataset_name
         reference_dataset, current_dataset = self.repository.load_datasets()
 
         if len(reference_dataset) < self.min_rows or len(current_dataset) < self.min_rows:
@@ -51,7 +53,7 @@ class AnalyzeDatasetDriftUseCase:
             raise DataValidationError("No shared columns found between reference and current datasets.")
 
         report = DriftAnalysisReport(
-            dataset_name=dataset_name,
+            dataset_name=resolved_dataset_name,
             generated_at=datetime.now(timezone.utc).isoformat(),
         )
 

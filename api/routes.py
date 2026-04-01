@@ -41,7 +41,7 @@ def analyze_drift(
 async def analyze_drift_from_files(
     reference_file: UploadFile = File(...),
     current_file: UploadFile = File(...),
-    dataset_name: str = Form("uploaded"),
+    dataset_name: str | None = Form(None),
     settings: AppSettings = Depends(get_settings),
 ) -> DriftDetectionResponse:
     detector = await build_detector_from_uploads(
@@ -49,7 +49,9 @@ async def analyze_drift_from_files(
         reference_file=reference_file,
         current_file=current_file,
     )
-    report = detector.generate_report(dataset_name=dataset_name)
+    report = detector.generate_report(
+        dataset_name=dataset_name or settings.runtime.uploaded_dataset_name,
+    )
     return _to_response(report)
 
 
