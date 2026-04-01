@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 import os
+from typing import Literal
 
 import yaml
 from dotenv import load_dotenv
@@ -20,6 +21,12 @@ class ThresholdSettings(BaseModel):
     numerical_p_value: float = 0.05
     categorical_distance: float = 0.10
     missing_rate_delta: float = 0.02
+    psi: float = 0.20
+    ks_significance_level: float = 0.05
+    kl_divergence: float = 0.10
+    histogram_bins: int = 10
+    histogram_strategy: Literal["quantile", "uniform"] = "quantile"
+    histogram_epsilon: float = 1e-6
 
 
 class MonitoringSettings(BaseModel):
@@ -58,4 +65,3 @@ def get_settings() -> AppSettings:
     config_path = Path(configured_path) if configured_path else DEFAULT_CONFIG_PATH
     raw_config = _load_yaml_file(config_path)
     return AppSettings(**raw_config)
-

@@ -11,6 +11,12 @@ thresholds:
   numerical_p_value: 0.05
   categorical_distance: 0.10
   missing_rate_delta: 0.02
+  psi: 0.20
+  ks_significance_level: 0.05
+  kl_divergence: 0.10
+  histogram_bins: 10
+  histogram_strategy: quantile
+  histogram_epsilon: 0.000001
 
 monitoring:
   min_rows: 100
@@ -20,4 +26,3 @@ monitoring:
 data:
   reference_dataset_path: datasets/reference.csv
   current_dataset_path: datasets/current.csv
-
