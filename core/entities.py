@@ -95,3 +95,14 @@ class AlertDispatchReport:
     webhook_sent: bool = False
     slack_sent: bool = False
     alerts: list[AlertEvent] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class RetrainingTriggerResult:
+    triggered: bool
+    reason: str
+    severity_threshold: str
+    qualifying_alert_count: int
+    pipeline_name: str | None = None
+    affected_features: list[str] = field(default_factory=list)
+    pipeline_response: dict | None = None

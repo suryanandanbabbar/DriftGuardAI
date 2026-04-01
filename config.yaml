@@ -46,3 +46,9 @@ alerts:
   webhook_url:
   slack_webhook_url:
   timeout_seconds: 5.0
+
+retraining:
+  enabled: true
+  trigger_severity: critical
+  min_alert_count: 1
+  pipeline_name: placeholder_retraining_pipeline

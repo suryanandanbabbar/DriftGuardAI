@@ -63,6 +63,13 @@ class AlertSettings(BaseModel):
     timeout_seconds: float = 5.0
 
 
+class RetrainingSettings(BaseModel):
+    enabled: bool = True
+    trigger_severity: Literal["warning", "critical"] = "critical"
+    min_alert_count: int = 1
+    pipeline_name: str = "placeholder_retraining_pipeline"
+
+
 class AppSettings(BaseModel):
     environment: str = "development"
     debug: bool = True
@@ -74,6 +81,7 @@ class AppSettings(BaseModel):
     data: DataSettings = Field(default_factory=DataSettings)
     runtime: RuntimeSettings = Field(default_factory=RuntimeSettings)
     alerts: AlertSettings = Field(default_factory=AlertSettings)
+    retraining: RetrainingSettings = Field(default_factory=RetrainingSettings)
 
 
 def _resolve_config_path() -> Path:
