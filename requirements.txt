@@ -6,4 +6,4 @@ uvicorn
 pydantic
 python-dotenv
 PyYAML
-
+python-multipart
