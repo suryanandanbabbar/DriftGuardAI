@@ -72,3 +72,26 @@ class FeatureDriftReport:
     @property
     def stable_features(self) -> list[FeatureDriftResult]:
         return [feature for feature in self.features if not feature.drift_detected]
+
+
+@dataclass(slots=True)
+class AlertEvent:
+    dataset_name: str
+    feature_name: str
+    feature_type: str
+    metric_name: str
+    metric_value: float | None
+    threshold: float
+    severity: str
+    message: str
+    p_value: float | None = None
+    generated_at: str | None = None
+
+
+@dataclass(slots=True)
+class AlertDispatchReport:
+    total_alerts: int
+    logged_alerts: int = 0
+    webhook_sent: bool = False
+    slack_sent: bool = False
+    alerts: list[AlertEvent] = field(default_factory=list)

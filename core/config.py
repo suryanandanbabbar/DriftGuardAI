@@ -41,6 +41,17 @@ class DataSettings(BaseModel):
     current_dataset_path: str = "datasets/current.csv"
 
 
+class AlertSettings(BaseModel):
+    enabled: bool = True
+    log_alerts: bool = True
+    minimum_severity: Literal["warning", "critical"] = "warning"
+    critical_excess_ratio: float = 1.5
+    critical_p_value_ratio: float = 0.2
+    webhook_url: str | None = None
+    slack_webhook_url: str | None = None
+    timeout_seconds: float = 5.0
+
+
 class AppSettings(BaseModel):
     environment: str = "development"
     debug: bool = True
@@ -49,6 +60,7 @@ class AppSettings(BaseModel):
     thresholds: ThresholdSettings = Field(default_factory=ThresholdSettings)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
     data: DataSettings = Field(default_factory=DataSettings)
+    alerts: AlertSettings = Field(default_factory=AlertSettings)
 
 
 def _load_yaml_file(config_path: Path) -> dict:

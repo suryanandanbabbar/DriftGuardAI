@@ -27,3 +27,13 @@ monitoring:
 data:
   reference_dataset_path: datasets/reference.csv
   current_dataset_path: datasets/current.csv
+
+alerts:
+  enabled: true
+  log_alerts: true
+  minimum_severity: warning
+  critical_excess_ratio: 1.5
+  critical_p_value_ratio: 0.2
+  webhook_url:
+  slack_webhook_url:
+  timeout_seconds: 5.0
